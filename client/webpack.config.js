@@ -1,4 +1,3 @@
-const isDebug = process.env.NODE_ENV !== 'production';
 const webpack = require('webpack');
 const path = require('path');
 const ExtractTextPlugin = require('extract-text-webpack-plugin');
@@ -8,8 +7,6 @@ const CircularDependencyPlugin = require('circular-dependency-plugin');
 
 const config = {
     context: path.join(__dirname, 'src'),
-    devtool: false,
-    entry: ['babel-polyfill', 'react-hot-loader/patch', './js/client.jsx'],
     resolve: {
         extensions: ['.js', '.jsx']
     },
@@ -67,33 +64,55 @@ const config = {
         filename: 'client.min.js'
     },
     plugins: [
-        new ExtractTextPlugin('app.css'),
-        new webpack.DefinePlugin({
-            'process.env.NODE_ENV': isDebug ? JSON.stringify('development') : JSON.stringify('production'),
-            __DEV__: isDebug
-        })
+        new ExtractTextPlugin('app.css')
     ]
 };
-
-if (isDebug) {
-    config.plugins.push(new StyleLintPlugin());
-    config.plugins.push(
-        new CircularDependencyPlugin({
-            // exclude detection of files based on a RegExp
-            exclude: /node_modules[/\\].*/,
-            // add errors to webpack instead of warnings
-            failOnError: true
-        })
-    );
+let finalConfig;
+if (process.env.NODE_ENV !== 'production') {
+    finalConfig = Object.assign({}, config, {
+        devServer: {
+            hot: true,
+            contentBase: path.resolve(__dirname, 'dist'),
+            publicPath: '/'
+        },
+        devtool: 'inline-source-map',
+        entry: [
+            'babel-polyfill',
+            'webpack-dev-server/client?http://localhost:8080',
+            'webpack/hot/only-dev-server',
+            'react-hot-loader/patch',
+            './js/client.jsx'
+        ],
+        plugins: [
+            ...config.plugins,
+            new StyleLintPlugin(),
+            new CircularDependencyPlugin({
+                exclude: /node_modules[/\\].*/,
+                failOnError: true
+            }),
+            new webpack.HotModuleReplacementPlugin(),
+            new webpack.NamedModulesPlugin()
+        ]
+    });
 } else {
-    config.plugins.push(new webpack.optimize.UglifyJsPlugin({
-        mangle: false,
-        sourcemap: false,
-        compress: {
-            warnings: true
-        }
-    }));
-    config.plugins.push(new webpack.optimize.AggressiveMergingPlugin());
+    finalConfig = Object.assign({}, config, {
+        devtool: false,
+        entry: [
+            'babel-polyfill',
+            './js/client.jsx'
+        ],
+        plugins: [
+            ...config.plugins,
+            new webpack.optimize.UglifyJsPlugin({
+                mangle: false,
+                sourcemap: false,
+                compress: {
+                    warnings: true
+                }
+            }),
+            new webpack.optimize.AggressiveMergingPlugin()
+        ]
+    });
 }
 
-module.exports = config;
+module.exports = finalConfig;
